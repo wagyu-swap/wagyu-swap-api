@@ -1,0 +1,58 @@
+name: Wagyuswap api staging deployment - Test, Build & Deploy
+
+on:
+  push:
+    branches: [staging]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [14.17.0]
+
+    steps:
+      - name: Start deployment
+        uses: bobheadxi/deployments@master
+        id: deployment
+        with:
+          step: start
+          token: ${{ secrets.GITHUB_TOKEN }}
+          env: Production
+
+      - uses: actions/checkout@v2
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install Node Modules
+        run: yarn
+
+      - name: Build
+        run: yarn build
+
+      - name: Executing remote ssh commands using password(Git Pull, Build)
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          password: ${{ secrets.REMOTE_PASSWORD }}
+          port: ${{ secrets.REMOTE_PORT }}
+          script: |
+            cd /root/projects/wagyu-swap-api
+            git reset --hard origin/staging
+            git pull
+            yarn
+            pm2 restart api.wagyuswap
+
+      - name: Update deployment status
+        uses: bobheadxi/deployments@master
+        if: always()
+        with:
+          step: finish
+          token: ${{ secrets.GITHUB_TOKEN }}
+          status: ${{ job.status }}
+          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
